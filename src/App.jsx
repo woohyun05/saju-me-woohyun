@@ -14,6 +14,7 @@ function App() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
   const [showResultPage, setShowResultPage] = useState(false)
+  const [activeReadingId, setActiveReadingId] = useState(null)
 
   const [readings, setReadings] = useState([])
 
@@ -23,19 +24,24 @@ function App() {
 
   useEffect(() => {
     function handlePopState() {
-      setName('')
-      setBirthDate('')
-      setBirthTime('')
-      setGender('')
-      setCalendarType('')
-      setSajuResult('')
-      setShowResultPage(false)
-      setError('')
+      resetForm()
     }
 
     window.addEventListener('popstate', handlePopState)
     return () => window.removeEventListener('popstate', handlePopState)
   }, [])
+
+  function resetForm() {
+    setName('')
+    setBirthDate('')
+    setBirthTime('')
+    setGender('')
+    setCalendarType('')
+    setSajuResult('')
+    setShowResultPage(false)
+    setActiveReadingId(null)
+    setError('')
+  }
 
   async function loadReadings() {
     const { data, error: fetchError } = await supabase
@@ -117,9 +123,41 @@ function App() {
     setGender(reading.gender)
     setCalendarType(reading.calendar_type)
     setSajuResult(reading.result)
+    setActiveReadingId(reading.id)
     setShowResultPage(true)
     setError('')
     enterResultPage()
+  }
+
+  function startEdit() {
+    setShowResultPage(false)
+    setSajuResult('')
+    setError('')
+  }
+
+  function startNewReading() {
+    resetForm()
+  }
+
+  async function deleteReading(id) {
+    if (!window.confirm('이 사주 기록을 삭제할까요?')) return
+
+    setError('')
+    const { error: deleteError } = await supabase.from('saju_readings').delete().eq('id', id)
+
+    if (deleteError) {
+      setError(deleteError.message || '삭제에 실패했습니다.')
+      return
+    }
+
+    if (activeReadingId === id) {
+      resetForm()
+      if (window.history.state?.page === 'result') {
+        window.history.back()
+      }
+    }
+
+    await loadReadings()
   }
 
   async function handleSajuSubmit() {
@@ -142,17 +180,36 @@ function App() {
         birthTimeLabel: formatBirthTime(birthTime),
       })
 
-      const { error: saveError } = await supabase.from('saju_readings').insert({
+      const payload = {
         name,
         birth_date: birthDate,
         birth_time: birthTime,
         gender,
         calendar_type: calendarType,
         result,
-      })
+      }
 
-      if (saveError) {
-        throw new Error(saveError.message || '사주 결과 저장에 실패했습니다.')
+      if (activeReadingId) {
+        const { error: updateError } = await supabase
+          .from('saju_readings')
+          .update(payload)
+          .eq('id', activeReadingId)
+
+        if (updateError) {
+          throw new Error(updateError.message || '사주 결과 수정에 실패했습니다.')
+        }
+      } else {
+        const { data, error: saveError } = await supabase
+          .from('saju_readings')
+          .insert(payload)
+          .select('id')
+          .single()
+
+        if (saveError) {
+          throw new Error(saveError.message || '사주 결과 저장에 실패했습니다.')
+        }
+
+        setActiveReadingId(data.id)
       }
 
       setSajuResult(result)
@@ -168,19 +225,32 @@ function App() {
 
   const sidebar = (
     <aside className="sidebar">
-      <h2 className="sidebar-title">저장된 사주</h2>
+      <div className="sidebar-header">
+        <h2 className="sidebar-title">저장된 사주</h2>
+        <button type="button" className="sidebar-new-btn" onClick={startNewReading}>
+          새로 입력
+        </button>
+      </div>
       {readings.length === 0 ? (
         <p className="sidebar-empty">아직 저장된 사주가 없습니다.</p>
       ) : (
         <ul className="sidebar-list">
           {readings.map((reading) => (
-            <li key={reading.id}>
+            <li key={reading.id} className="sidebar-row">
               <button
                 type="button"
-                className="sidebar-item"
+                className={`sidebar-item${activeReadingId === reading.id ? ' is-active' : ''}`}
                 onClick={() => openReading(reading)}
               >
                 {reading.name}
+              </button>
+              <button
+                type="button"
+                className="sidebar-delete-btn"
+                aria-label={`${reading.name} 삭제`}
+                onClick={() => deleteReading(reading.id)}
+              >
+                ×
               </button>
             </li>
           ))}
@@ -217,6 +287,23 @@ function App() {
               </div>
             ))}
           </div>
+
+          {activeReadingId && (
+            <div className="result-actions">
+              <button type="button" className="action-btn" onClick={startEdit}>
+                수정
+              </button>
+              <button
+                type="button"
+                className="action-btn action-btn-danger"
+                onClick={() => deleteReading(activeReadingId)}
+              >
+                삭제
+              </button>
+            </div>
+          )}
+
+          {error && <p className="error-msg">{error}</p>}
         </div>
       </div>
     )
@@ -226,7 +313,7 @@ function App() {
     <div className="app-shell">
       {sidebar}
       <div className="page">
-        <h1 className="page-title">사주 입력</h1>
+        <h1 className="page-title">{activeReadingId ? '사주 수정' : '사주 입력'}</h1>
 
         <div className="form-group">
           <label className="form-label" htmlFor="name">이름</label>
@@ -331,8 +418,20 @@ function App() {
           onClick={handleSajuSubmit}
           disabled={isLoading || !isFormComplete()}
         >
-          {isLoading ? '사주 해석 중...' : '사주 보기'}
+          {isLoading
+            ? activeReadingId
+              ? '수정 중...'
+              : '사주 해석 중...'
+            : activeReadingId
+              ? '수정 후 다시 해석'
+              : '사주 보기'}
         </button>
+
+        {activeReadingId && (
+          <button type="button" className="cancel-btn" onClick={startNewReading}>
+            수정 취소
+          </button>
+        )}
 
         {isLoading && <p className="loading-text">잠시만 기다려 주세요.</p>}
         {error && <p className="error-msg">{error}</p>}

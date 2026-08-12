@@ -25,9 +25,33 @@
   font-size: 0.8125rem;
   font-weight: 600;
   color: #555;
-  padding: 0 20px 16px;
   letter-spacing: -0.01em;
+}
+
+.sidebar-header {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 20px 16px;
   border-bottom: 1px solid #eee;
+}
+
+.sidebar-new-btn {
+  padding: 4px 8px;
+  font-size: 0.75rem;
+  color: #555;
+  background: transparent;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.sidebar-new-btn:hover {
+  color: #111;
+  border-color: #888;
 }
 
 .sidebar-empty {
@@ -50,9 +74,15 @@
   width: 100%;
 }
 
+.sidebar-row {
+  display: flex;
+  align-items: stretch;
+  border-bottom: 1px solid #f0f0f0;
+}
+
 .sidebar-item {
+  flex: 1;
   display: block;
-  width: 100%;
   padding: 12px 20px;
   font-size: 0.9375rem;
   font-weight: 500;
@@ -61,12 +91,29 @@
   background: transparent;
   border: none;
   border-radius: 0;
-  border-bottom: 1px solid #f0f0f0;
   cursor: pointer;
   transition: background 0.15s;
 }
 
+.sidebar-item.is-active,
 .sidebar-item:hover {
+  background: #f5f5f5;
+}
+
+.sidebar-delete-btn {
+  flex-shrink: 0;
+  width: 40px;
+  font-size: 1.125rem;
+  line-height: 1;
+  color: #999;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s;
+}
+
+.sidebar-delete-btn:hover {
+  color: #111;
   background: #f5f5f5;
 }
 
@@ -200,6 +247,51 @@
 .submit-btn:disabled {
   opacity: 0.4;
   cursor: not-allowed;
+}
+
+.cancel-btn {
+  margin-top: 12px;
+  padding: 10px 20px;
+  font-size: 0.875rem;
+  color: #555;
+  background: transparent;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.cancel-btn:hover {
+  color: #111;
+  border-color: #888;
+}
+
+.result-actions {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 24px;
+}
+
+.action-btn {
+  padding: 10px 18px;
+  font-size: 0.875rem;
+  color: #555;
+  background: transparent;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.action-btn:hover {
+  color: #111;
+  border-color: #888;
+}
+
+.action-btn-danger:hover {
+  color: #b00020;
+  border-color: #b00020;
 }
 
 .error-msg {
