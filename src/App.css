@@ -117,6 +117,56 @@
   background: #f5f5f5;
 }
 
+.sidebar-auth {
+  flex-shrink: 0;
+  margin-top: auto;
+  padding: 16px 20px;
+  border-top: 1px solid #eee;
+}
+
+.sidebar-auth-status {
+  font-size: 0.75rem;
+  color: #999;
+}
+
+.sidebar-auth-email {
+  margin-bottom: 8px;
+  font-size: 0.75rem;
+  color: #555;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar-auth-btn {
+  width: 100%;
+  padding: 8px 12px;
+  font-size: 0.75rem;
+  color: #555;
+  background: transparent;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+
+.sidebar-auth-btn:hover {
+  color: #111;
+  border-color: #888;
+}
+
+.sidebar-auth-btn-primary {
+  color: #fff;
+  background: #1a1a1a;
+  border-color: #1a1a1a;
+}
+
+.sidebar-auth-btn-primary:hover {
+  color: #fff;
+  background: #333;
+  border-color: #333;
+}
+
 .page {
   flex: 1;
   width: 100%;

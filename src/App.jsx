@@ -17,9 +17,27 @@ function App() {
   const [activeReadingId, setActiveReadingId] = useState(null)
 
   const [readings, setReadings] = useState([])
+  const [user, setUser] = useState(null)
+  const [authLoading, setAuthLoading] = useState(true)
 
   useEffect(() => {
     loadReadings()
+  }, [])
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null)
+      setAuthLoading(false)
+    })
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null)
+      setAuthLoading(false)
+    })
+
+    return () => subscription.unsubscribe()
   }, [])
 
   useEffect(() => {
@@ -41,6 +59,29 @@ function App() {
     setShowResultPage(false)
     setActiveReadingId(null)
     setError('')
+  }
+
+  async function handleGoogleSignIn() {
+    setError('')
+    const { error: signInError } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: window.location.origin,
+      },
+    })
+
+    if (signInError) {
+      setError(signInError.message || 'Google 로그인에 실패했습니다.')
+    }
+  }
+
+  async function handleSignOut() {
+    setError('')
+    const { error: signOutError } = await supabase.auth.signOut()
+
+    if (signOutError) {
+      setError(signOutError.message || '로그아웃에 실패했습니다.')
+    }
   }
 
   async function loadReadings() {
@@ -223,6 +264,27 @@ function App() {
     }
   }
 
+  const authSection = (
+    <div className="sidebar-auth">
+      {authLoading ? (
+        <p className="sidebar-auth-status">로그인 확인 중...</p>
+      ) : user ? (
+        <>
+          <p className="sidebar-auth-email" title={user.email ?? ''}>
+            {user.user_metadata?.full_name || user.email}
+          </p>
+          <button type="button" className="sidebar-auth-btn" onClick={handleSignOut}>
+            로그아웃
+          </button>
+        </>
+      ) : (
+        <button type="button" className="sidebar-auth-btn sidebar-auth-btn-primary" onClick={handleGoogleSignIn}>
+          Google로 로그인
+        </button>
+      )}
+    </div>
+  )
+
   const sidebar = (
     <aside className="sidebar">
       <div className="sidebar-header">
@@ -256,6 +318,7 @@ function App() {
           ))}
         </ul>
       )}
+      {authSection}
     </aside>
   )
 
