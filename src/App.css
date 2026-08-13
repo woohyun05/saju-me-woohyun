@@ -150,6 +150,10 @@
   transition: border-color 0.15s, color 0.15s, background 0.15s;
 }
 
+.sidebar-auth-btn + .sidebar-auth-btn {
+  margin-top: 8px;
+}
+
 .sidebar-auth-btn:hover {
   color: #111;
   border-color: #888;
@@ -165,6 +169,119 @@
   color: #fff;
   background: #333;
   border-color: #333;
+}
+
+.guest-panel {
+  margin-top: 8px;
+}
+
+.guest-text {
+  margin-bottom: 24px;
+  font-size: 0.9375rem;
+  color: #555;
+  line-height: 1.7;
+}
+
+.profile-card {
+  margin-bottom: 28px;
+  padding: 20px;
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  text-align: left;
+}
+
+.profile-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.profile-card-header strong {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: #111;
+}
+
+.profile-edit-link {
+  padding: 4px 8px;
+  font-size: 0.75rem;
+  color: #555;
+  background: transparent;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.profile-edit-link:hover {
+  color: #111;
+  border-color: #888;
+}
+
+.profile-card-meta {
+  font-size: 0.875rem;
+  color: #444;
+  line-height: 1.8;
+}
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.modal-panel {
+  width: 100%;
+  max-width: 400px;
+  max-height: calc(100vh - 40px);
+  overflow-y: auto;
+  padding: 28px 24px;
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  text-align: center;
+}
+
+.modal-title {
+  margin-bottom: 8px;
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #111;
+}
+
+.modal-desc {
+  margin-bottom: 24px;
+  font-size: 0.8125rem;
+  color: #666;
+  line-height: 1.6;
+}
+
+.modal-form .form-input {
+  max-width: none;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.modal-cancel-btn {
+  margin-top: 0;
+}
+
+.modal-submit-btn {
+  max-width: none;
+  flex: 1;
 }
 
 .page {
