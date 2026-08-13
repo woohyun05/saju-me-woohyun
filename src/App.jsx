@@ -1,8 +1,12 @@
 import { useEffect, useState } from 'react'
 import ProfileModal from './components/ProfileModal.jsx'
+import SkyDecor from './components/SkyDecor.jsx'
 import { getSajuReading } from './services/gemini.js'
 import { supabase } from './lib/supabase.js'
 import './App.css'
+
+const DRAFT_KEY = 'saju_me_draft'
+const PENDING_RESULT_KEY = 'saju_me_pending_result'
 
 function profileFromRow(row) {
   if (!row) return null
@@ -15,13 +19,42 @@ function profileFromRow(row) {
   }
 }
 
+function emptyForm() {
+  return {
+    name: '',
+    birthDate: '',
+    birthTime: '',
+    gender: '',
+    calendarType: '',
+  }
+}
+
+function loadDraft() {
+  try {
+    const raw = sessionStorage.getItem(DRAFT_KEY)
+    if (!raw) return emptyForm()
+    return { ...emptyForm(), ...JSON.parse(raw) }
+  } catch {
+    return emptyForm()
+  }
+}
+
+function saveDraft(form) {
+  sessionStorage.setItem(DRAFT_KEY, JSON.stringify(form))
+}
+
+function isFormComplete(form) {
+  return Boolean(form.name && form.birthDate && form.birthTime && form.gender && form.calendarType)
+}
+
 function App() {
+  const [form, setForm] = useState(loadDraft)
   const [profile, setProfile] = useState(null)
   const [profileLoading, setProfileLoading] = useState(false)
   const [showProfileModal, setShowProfileModal] = useState(false)
-  const [profileModalMode, setProfileModalMode] = useState('onboarding')
   const [profileSaving, setProfileSaving] = useState(false)
   const [profileError, setProfileError] = useState('')
+  const [showLoginGate, setShowLoginGate] = useState(false)
 
   const [sajuResult, setSajuResult] = useState('')
   const [isLoading, setIsLoading] = useState(false)
@@ -32,6 +65,10 @@ function App() {
   const [readings, setReadings] = useState([])
   const [user, setUser] = useState(null)
   const [authLoading, setAuthLoading] = useState(true)
+
+  useEffect(() => {
+    saveDraft(form)
+  }, [form])
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -53,14 +90,65 @@ function App() {
     if (!user) {
       setProfile(null)
       setReadings([])
-      setShowProfileModal(false)
       setProfileLoading(false)
-      resetReadingView()
+      setShowProfileModal(false)
       return
     }
 
-    loadProfile(user.id)
-    loadReadings(user.id)
+    let cancelled = false
+
+    async function bootstrapLoggedInUser() {
+      setProfileLoading(true)
+      setError('')
+
+      const { data, error: fetchError } = await supabase
+        .from('users')
+        .select('id, name, birth_date, birth_time, gender, calendar_type')
+        .eq('id', user.id)
+        .maybeSingle()
+
+      if (cancelled) return
+
+      if (fetchError) {
+        console.error(fetchError)
+        setError(fetchError.message || '프로필을 불러오지 못했습니다.')
+        setProfileLoading(false)
+        return
+      }
+
+      const pendingResult = sessionStorage.getItem(PENDING_RESULT_KEY) === '1'
+      const draft = loadDraft()
+
+      if (data) {
+        const loaded = profileFromRow(data)
+        setProfile(loaded)
+        if (!pendingResult) {
+          setForm(loaded)
+        }
+      } else {
+        setProfile(null)
+      }
+
+      await loadReadings(user.id)
+
+      if (pendingResult && isFormComplete(draft)) {
+        sessionStorage.removeItem(PENDING_RESULT_KEY)
+        setForm(draft)
+        setShowLoginGate(false)
+        setProfileLoading(false)
+        await runSajuReading(draft, user.id)
+        return
+      }
+
+      sessionStorage.removeItem(PENDING_RESULT_KEY)
+      setProfileLoading(false)
+    }
+
+    bootstrapLoggedInUser()
+
+    return () => {
+      cancelled = true
+    }
   }, [user])
 
   useEffect(() => {
@@ -72,40 +160,15 @@ function App() {
     return () => window.removeEventListener('popstate', handlePopState)
   }, [])
 
+  function updateForm(field, value) {
+    setForm((prev) => ({ ...prev, [field]: value }))
+  }
+
   function resetReadingView() {
     setSajuResult('')
     setShowResultPage(false)
     setActiveReadingId(null)
     setError('')
-  }
-
-  async function loadProfile(userId) {
-    setProfileLoading(true)
-    setProfileError('')
-
-    const { data, error: fetchError } = await supabase
-      .from('users')
-      .select('id, name, birth_date, birth_time, gender, calendar_type')
-      .eq('id', userId)
-      .maybeSingle()
-
-    if (fetchError) {
-      console.error(fetchError)
-      setError(fetchError.message || '프로필을 불러오지 못했습니다.')
-      setProfileLoading(false)
-      return
-    }
-
-    if (!data) {
-      setProfile(null)
-      setProfileModalMode('onboarding')
-      setShowProfileModal(true)
-    } else {
-      setProfile(profileFromRow(data))
-      setShowProfileModal(false)
-    }
-
-    setProfileLoading(false)
   }
 
   async function loadReadings(userId) {
@@ -123,8 +186,35 @@ function App() {
     setReadings(data ?? [])
   }
 
+  async function upsertProfile(userId, values) {
+    const payload = {
+      id: userId,
+      name: values.name,
+      birth_date: values.birthDate,
+      birth_time: values.birthTime,
+      gender: values.gender,
+      calendar_type: values.calendarType,
+      updated_at: new Date().toISOString(),
+    }
+
+    const { data, error: saveError } = await supabase
+      .from('users')
+      .upsert(payload, { onConflict: 'id' })
+      .select('id, name, birth_date, birth_time, gender, calendar_type')
+      .single()
+
+    if (saveError) {
+      throw new Error(saveError.message || '프로필 저장에 실패했습니다.')
+    }
+
+    const next = profileFromRow(data)
+    setProfile(next)
+    return next
+  }
+
   async function handleGoogleSignIn() {
     setError('')
+    saveDraft(form)
     const { error: signInError } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
@@ -148,7 +238,6 @@ function App() {
 
   function openProfileEditor() {
     setProfileError('')
-    setProfileModalMode('edit')
     setShowProfileModal(true)
   }
 
@@ -158,31 +247,15 @@ function App() {
     setProfileSaving(true)
     setProfileError('')
 
-    const payload = {
-      id: user.id,
-      name: values.name,
-      birth_date: values.birthDate,
-      birth_time: values.birthTime,
-      gender: values.gender,
-      calendar_type: values.calendarType,
-      updated_at: new Date().toISOString(),
-    }
-
-    const { data, error: saveError } = await supabase
-      .from('users')
-      .upsert(payload, { onConflict: 'id' })
-      .select('id, name, birth_date, birth_time, gender, calendar_type')
-      .single()
-
-    if (saveError) {
-      setProfileError(saveError.message || '프로필 저장에 실패했습니다.')
+    try {
+      const next = await upsertProfile(user.id, values)
+      setForm(next)
+      setShowProfileModal(false)
+    } catch (err) {
+      setProfileError(err.message || '프로필 저장에 실패했습니다.')
+    } finally {
       setProfileSaving(false)
-      return
     }
-
-    setProfile(profileFromRow(data))
-    setShowProfileModal(false)
-    setProfileSaving(false)
   }
 
   function formatBirthTime(time) {
@@ -288,36 +361,28 @@ function App() {
     }
   }
 
-  async function handleSajuSubmit() {
-    if (!user) {
-      setError('Google 로그인 후 이용해 주세요.')
-      return
-    }
-
-    if (!profile) {
-      setProfileModalMode('onboarding')
-      setShowProfileModal(true)
-      return
-    }
-
+  async function runSajuReading(values, userId) {
     setError('')
     setSajuResult('')
     setIsLoading(true)
+    setShowLoginGate(false)
 
     try {
+      await upsertProfile(userId, values)
+
       const result = await getSajuReading({
-        name: profile.name,
-        birthDate: profile.birthDate,
-        birthTime: profile.birthTime,
-        gender: profile.gender,
-        calendarType: profile.calendarType,
-        birthTimeLabel: formatBirthTime(profile.birthTime),
+        name: values.name,
+        birthDate: values.birthDate,
+        birthTime: values.birthTime,
+        gender: values.gender,
+        calendarType: values.calendarType,
+        birthTimeLabel: formatBirthTime(values.birthTime),
       })
 
       const { data, error: saveError } = await supabase
         .from('saju_readings')
         .insert({
-          user_id: user.id,
+          user_id: userId,
           result,
         })
         .select('id')
@@ -331,7 +396,7 @@ function App() {
       setSajuResult(result)
       setShowResultPage(true)
       enterResultPage()
-      await loadReadings(user.id)
+      await loadReadings(userId)
     } catch (err) {
       setError(err.message || '사주 해석 중 오류가 발생했습니다.')
     } finally {
@@ -339,8 +404,25 @@ function App() {
     }
   }
 
-  const needsOnboarding = Boolean(user && !profileLoading && !profile)
-  const modalVisible = showProfileModal && (needsOnboarding || profileModalMode === 'edit')
+  async function handleSajuSubmit() {
+    if (!isFormComplete(form)) {
+      setError('모든 항목을 입력해 주세요.')
+      return
+    }
+
+    saveDraft(form)
+
+    if (!user) {
+      sessionStorage.setItem(PENDING_RESULT_KEY, '1')
+      setShowLoginGate(true)
+      setError('')
+      return
+    }
+
+    await runSajuReading(form, user.id)
+  }
+
+  const displayInfo = profile ?? (isFormComplete(form) ? form : null)
 
   const authSection = (
     <div className="sidebar-auth">
@@ -361,7 +443,7 @@ function App() {
           </button>
         </>
       ) : (
-        <button type="button" className="sidebar-auth-btn sidebar-auth-btn-primary" onClick={handleGoogleSignIn}>
+        <button type="button" className="sidebar-auth-btn" onClick={handleGoogleSignIn}>
           Google로 로그인
         </button>
       )}
@@ -417,31 +499,46 @@ function App() {
     </aside>
   )
 
-  const profileModal = modalVisible ? (
+  const profileModal = showProfileModal && user ? (
     <ProfileModal
-      key={`${profileModalMode}-${profile?.name ?? 'new'}`}
-      mode={needsOnboarding ? 'onboarding' : profileModalMode}
-      initialValues={
-        needsOnboarding
-          ? {
-              name: user?.user_metadata?.full_name ?? '',
-              birthDate: '',
-              birthTime: '',
-              gender: '',
-              calendarType: '',
-            }
-          : profile
-      }
+      key={`edit-${profile?.name ?? 'profile'}`}
+      mode="edit"
+      initialValues={profile ?? form}
       isSaving={profileSaving}
       error={profileError}
       onSubmit={handleProfileSubmit}
       onClose={() => {
-        if (!needsOnboarding) {
-          setShowProfileModal(false)
-          setProfileError('')
-        }
+        setShowProfileModal(false)
+        setProfileError('')
       }}
     />
+  ) : null
+
+  const loginGate = showLoginGate ? (
+    <div className="modal-overlay" role="presentation">
+      <div className="modal-panel login-gate" role="dialog" aria-modal="true" aria-labelledby="login-gate-title">
+        <img className="mascot mascot-gate" src="/mascot.png" alt="" width={72} height={72} />
+        <h2 id="login-gate-title" className="modal-title">
+          결과를 보려면 로그인이 필요해요
+        </h2>
+        <p className="modal-desc">
+          입력하신 정보는 그대로 유지됩니다. Google 로그인 후 사주 해석 결과를 바로 확인할 수 있어요.
+        </p>
+        <button type="button" className="submit-btn modal-submit-btn" onClick={handleGoogleSignIn}>
+          Google로 로그인하고 결과 보기
+        </button>
+        <button
+          type="button"
+          className="cancel-btn modal-cancel-btn"
+          onClick={() => {
+            setShowLoginGate(false)
+            sessionStorage.removeItem(PENDING_RESULT_KEY)
+          }}
+        >
+          돌아가기
+        </button>
+      </div>
+    </div>
   ) : null
 
   const brandMark = (
@@ -457,24 +554,121 @@ function App() {
     </div>
   )
 
-  if (showResultPage && sajuResult && profile) {
+  const inputForm = (
+    <div className="input-form">
+      <div className="form-group">
+        <label className="form-label" htmlFor="name">
+          이름
+        </label>
+        <input
+          id="name"
+          className="form-input"
+          type="text"
+          value={form.name}
+          onChange={(e) => updateForm('name', e.target.value)}
+          placeholder="이름을 입력하세요"
+        />
+      </div>
+
+      <div className="form-group">
+        <label className="form-label" htmlFor="birthDate">
+          생년월일
+        </label>
+        <input
+          id="birthDate"
+          className="form-input"
+          type="date"
+          value={form.birthDate}
+          onChange={(e) => updateForm('birthDate', e.target.value)}
+        />
+      </div>
+
+      <div className="form-group">
+        <label className="form-label" htmlFor="birthTime">
+          태어난 시간
+        </label>
+        <input
+          id="birthTime"
+          className="form-input"
+          type="time"
+          value={form.birthTime}
+          onChange={(e) => updateForm('birthTime', e.target.value)}
+        />
+      </div>
+
+      <div className="form-group">
+        <span className="form-label">성별</span>
+        <div className="radio-group">
+          <label className="radio-label">
+            <input
+              type="radio"
+              name="gender"
+              value="male"
+              checked={form.gender === 'male'}
+              onChange={(e) => updateForm('gender', e.target.value)}
+            />
+            남성
+          </label>
+          <label className="radio-label">
+            <input
+              type="radio"
+              name="gender"
+              value="female"
+              checked={form.gender === 'female'}
+              onChange={(e) => updateForm('gender', e.target.value)}
+            />
+            여성
+          </label>
+        </div>
+      </div>
+
+      <div className="form-group">
+        <span className="form-label">달력</span>
+        <div className="radio-group">
+          <label className="radio-label">
+            <input
+              type="radio"
+              name="calendarType"
+              value="solar"
+              checked={form.calendarType === 'solar'}
+              onChange={(e) => updateForm('calendarType', e.target.value)}
+            />
+            양력
+          </label>
+          <label className="radio-label">
+            <input
+              type="radio"
+              name="calendarType"
+              value="lunar"
+              checked={form.calendarType === 'lunar'}
+              onChange={(e) => updateForm('calendarType', e.target.value)}
+            />
+            음력
+          </label>
+        </div>
+      </div>
+    </div>
+  )
+
+  if (showResultPage && sajuResult && displayInfo) {
     return (
       <div className="app-shell">
+        <SkyDecor />
         {sidebar}
         <div className="page page-result">
           {brandMark}
           <h1 className="page-title">사주 해석 결과</h1>
 
           <div className="result-header">
-            <p className="result-name">{profile.name} 님의 사주</p>
+            <p className="result-name">{displayInfo.name} 님의 사주</p>
             <p className="result-meta">
-              생년월일: {profile.birthDate}
+              생년월일: {displayInfo.birthDate}
               <br />
-              태어난 시간: {formatBirthTime(profile.birthTime)}
+              태어난 시간: {formatBirthTime(displayInfo.birthTime)}
               <br />
-              성별: {profile.gender === 'male' ? '남' : profile.gender === 'female' ? '여' : ''}
+              성별: {displayInfo.gender === 'male' ? '남' : displayInfo.gender === 'female' ? '여' : ''}
               <br />
-              달력: {profile.calendarType === 'solar' ? '양력' : profile.calendarType === 'lunar' ? '음력' : ''}
+              달력: {displayInfo.calendarType === 'solar' ? '양력' : displayInfo.calendarType === 'lunar' ? '음력' : ''}
             </p>
           </div>
 
@@ -505,92 +699,74 @@ function App() {
           {error && <p className="error-msg">{error}</p>}
         </div>
         {profileModal}
+        {loginGate}
       </div>
     )
   }
 
   return (
     <div className="app-shell">
+      <SkyDecor />
       {sidebar}
       <div className="page page-home">
-        {!user ? (
-          <section className="hero">
-            <p className="brand-name">사주 Me</p>
+        {user && profileLoading ? (
+          <p className="loading-text">프로필을 불러오는 중...</p>
+        ) : isLoading ? (
+          <section className="home-panel">
+            <p className="brand-name brand-name-compact">사주 Me</p>
+            <div className="reading-wait" aria-live="polite">
+              <img className="mascot mascot-loading" src="/mascot.png" alt="" width={96} height={96} />
+              <p className="loading-text">별자리를 읽는 중이에요...</p>
+            </div>
+          </section>
+        ) : (
+          <section className="home-panel">
+            <p className="brand-name brand-name-compact">사주 Me</p>
             <img
-              className="mascot mascot-hero"
+              className="mascot mascot-home"
               src="/mascot.png"
               alt="사주 Me 마스코트"
-              width={220}
-              height={220}
+              width={140}
+              height={140}
             />
-            <p className="hero-copy">생년월일과 태어난 시간으로, 오늘의 나를 읽어 보세요.</p>
+            <p className="hero-copy hero-copy-compact">
+              {user
+                ? '정보를 확인하고 사주를 읽어 보세요.'
+                : '먼저 정보를 입력해 보세요. 결과는 로그인 후 확인할 수 있어요.'}
+            </p>
+
+            {inputForm}
+
+            <div className="preview-box">
+              <strong>{form.name ? `${form.name} 님의 사주` : '입력 미리보기'}</strong>
+              생년월일: {form.birthDate || '-'}
+              <br />
+              태어난 시간: {formatBirthTime(form.birthTime) || '-'}
+              <br />
+              성별: {form.gender === 'male' ? '남' : form.gender === 'female' ? '여' : '-'}
+              <br />
+              달력: {form.calendarType === 'solar' ? '양력' : form.calendarType === 'lunar' ? '음력' : '-'}
+            </div>
+
             <button
               type="button"
               className="submit-btn"
-              onClick={handleGoogleSignIn}
-              disabled={authLoading}
+              onClick={handleSajuSubmit}
+              disabled={!isFormComplete(form)}
             >
-              Google로 시작하기
+              결과 보기
             </button>
-          </section>
-        ) : profileLoading ? (
-          <p className="loading-text">프로필을 불러오는 중...</p>
-        ) : profile ? (
-          <section className="home-panel">
-            <p className="brand-name brand-name-compact">사주 Me</p>
 
-            {isLoading ? (
-              <div className="reading-wait" aria-live="polite">
-                <img
-                  className="mascot mascot-loading"
-                  src="/mascot.png"
-                  alt=""
-                  width={96}
-                  height={96}
-                />
-                <p className="loading-text">별자리를 읽는 중이에요...</p>
-              </div>
-            ) : (
-              <>
-                <div className="profile-card">
-                  <div className="profile-card-header">
-                    <strong>{profile.name} 님</strong>
-                    <button type="button" className="profile-edit-link" onClick={openProfileEditor}>
-                      수정
-                    </button>
-                  </div>
-                  <p className="profile-card-meta">
-                    생년월일: {profile.birthDate}
-                    <br />
-                    태어난 시간: {formatBirthTime(profile.birthTime)}
-                    <br />
-                    성별: {profile.gender === 'male' ? '남' : '여'}
-                    <br />
-                    달력: {profile.calendarType === 'solar' ? '양력' : '음력'}
-                  </p>
-                </div>
-
-                <button
-                  type="button"
-                  className="submit-btn"
-                  onClick={handleSajuSubmit}
-                  disabled={isLoading}
-                >
-                  사주 보기
-                </button>
-              </>
+            {!user && (
+              <p className="gate-hint">결과 확인 시 Google 로그인이 필요합니다.</p>
             )}
 
             {error && <p className="error-msg">{error}</p>}
           </section>
-        ) : (
-          <section className="hero">
-            <p className="brand-name">사주 Me</p>
-            <p className="guest-text">사주 해석을 위해 프로필 정보가 필요합니다.</p>
-          </section>
         )}
       </div>
       {profileModal}
+      {loginGate}
     </div>
   )
 }
