@@ -370,6 +370,16 @@ function App() {
 
   const sidebar = (
     <aside className="sidebar">
+      <div className="sidebar-brand">
+        <img
+          className="mascot mascot-sidebar"
+          src="/mascot.png"
+          alt=""
+          width={56}
+          height={56}
+        />
+        <span className="sidebar-brand-text">사주 Me</span>
+      </div>
       <div className="sidebar-header">
         <h2 className="sidebar-title">내 사주 기록</h2>
         <button type="button" className="sidebar-new-btn" onClick={startNewReading}>
@@ -434,11 +444,25 @@ function App() {
     />
   ) : null
 
+  const brandMark = (
+    <div className="brand-mark">
+      <img
+        className="mascot mascot-result"
+        src="/mascot.png"
+        alt=""
+        width={88}
+        height={88}
+      />
+      <span className="brand-mark-text">사주 Me</span>
+    </div>
+  )
+
   if (showResultPage && sajuResult && profile) {
     return (
       <div className="app-shell">
         {sidebar}
-        <div className="page">
+        <div className="page page-result">
+          {brandMark}
           <h1 className="page-title">사주 해석 결과</h1>
 
           <div className="result-header">
@@ -488,59 +512,82 @@ function App() {
   return (
     <div className="app-shell">
       {sidebar}
-      <div className="page">
-        <h1 className="page-title">사주 보기</h1>
-
+      <div className="page page-home">
         {!user ? (
-          <div className="guest-panel">
-            <p className="guest-text">Google 로그인 후 프로필을 설정하면 사주를 볼 수 있습니다.</p>
+          <section className="hero">
+            <p className="brand-name">사주 Me</p>
+            <img
+              className="mascot mascot-hero"
+              src="/mascot.png"
+              alt="사주 Me 마스코트"
+              width={220}
+              height={220}
+            />
+            <p className="hero-copy">생년월일과 태어난 시간으로, 오늘의 나를 읽어 보세요.</p>
             <button
               type="button"
               className="submit-btn"
               onClick={handleGoogleSignIn}
               disabled={authLoading}
             >
-              Google로 로그인
+              Google로 시작하기
             </button>
-          </div>
+          </section>
         ) : profileLoading ? (
           <p className="loading-text">프로필을 불러오는 중...</p>
         ) : profile ? (
-          <>
-            <div className="profile-card">
-              <div className="profile-card-header">
-                <strong>{profile.name} 님</strong>
-                <button type="button" className="profile-edit-link" onClick={openProfileEditor}>
-                  수정
-                </button>
+          <section className="home-panel">
+            <p className="brand-name brand-name-compact">사주 Me</p>
+
+            {isLoading ? (
+              <div className="reading-wait" aria-live="polite">
+                <img
+                  className="mascot mascot-loading"
+                  src="/mascot.png"
+                  alt=""
+                  width={96}
+                  height={96}
+                />
+                <p className="loading-text">별자리를 읽는 중이에요...</p>
               </div>
-              <p className="profile-card-meta">
-                생년월일: {profile.birthDate}
-                <br />
-                태어난 시간: {formatBirthTime(profile.birthTime)}
-                <br />
-                성별: {profile.gender === 'male' ? '남' : '여'}
-                <br />
-                달력: {profile.calendarType === 'solar' ? '양력' : '음력'}
-              </p>
-            </div>
+            ) : (
+              <>
+                <div className="profile-card">
+                  <div className="profile-card-header">
+                    <strong>{profile.name} 님</strong>
+                    <button type="button" className="profile-edit-link" onClick={openProfileEditor}>
+                      수정
+                    </button>
+                  </div>
+                  <p className="profile-card-meta">
+                    생년월일: {profile.birthDate}
+                    <br />
+                    태어난 시간: {formatBirthTime(profile.birthTime)}
+                    <br />
+                    성별: {profile.gender === 'male' ? '남' : '여'}
+                    <br />
+                    달력: {profile.calendarType === 'solar' ? '양력' : '음력'}
+                  </p>
+                </div>
 
-            <button
-              type="button"
-              className="submit-btn"
-              onClick={handleSajuSubmit}
-              disabled={isLoading}
-            >
-              {isLoading ? '사주 해석 중...' : '사주 보기'}
-            </button>
+                <button
+                  type="button"
+                  className="submit-btn"
+                  onClick={handleSajuSubmit}
+                  disabled={isLoading}
+                >
+                  사주 보기
+                </button>
+              </>
+            )}
 
-            {isLoading && <p className="loading-text">잠시만 기다려 주세요.</p>}
             {error && <p className="error-msg">{error}</p>}
-          </>
+          </section>
         ) : (
-          <div className="guest-panel">
+          <section className="hero">
+            <p className="brand-name">사주 Me</p>
             <p className="guest-text">사주 해석을 위해 프로필 정보가 필요합니다.</p>
-          </div>
+          </section>
         )}
       </div>
       {profileModal}
