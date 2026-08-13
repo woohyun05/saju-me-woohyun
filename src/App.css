@@ -270,7 +270,7 @@
 .mascot {
   display: block;
   object-fit: contain;
-  image-rendering: auto;
+  image-rendering: pixelated;
   user-select: none;
   pointer-events: none;
 }
